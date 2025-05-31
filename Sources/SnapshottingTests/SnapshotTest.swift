@@ -9,6 +9,7 @@ import Foundation
 @_implementationOnly import SnapshotPreviewsCore
 import XCTest
 import XCTest
+import SwiftUI
 
 /// A test class for generating snapshots of Xcode previews.
 ///
@@ -30,6 +31,10 @@ open class SnapshotTest: PreviewBaseTest, PreviewFilters {
   /// - Returns: An optional array of String containing the names of previews to be excluded.
   open class func excludedSnapshotPreviews() -> [String]? {
       nil
+  }
+
+  open class func viewForRecord(_ view: AnyView, name: String?) {
+
   }
 
   /// Determines the appropriate rendering strategy based on the current platform and OS version.
@@ -89,10 +94,12 @@ open class SnapshotTest: PreviewBaseTest, PreviewFilters {
       return
     }
     do {
+      let previewDisplayName = preview.displayName
       let attachment = try XCTAttachment(image: result.image.get())
-      attachment.name = preview.displayName
+      attachment.name = previewDisplayName
       attachment.lifetime = .keepAlways
       add(attachment)
+      Self.viewForRecord(AnyView(preview.view()), name: previewDisplayName)
     } catch {
       XCTFail("Error \(error)")
     }
