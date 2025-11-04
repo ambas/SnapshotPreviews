@@ -11,12 +11,17 @@ import SnapshotPreviewsCore
 
 struct PreviewsDetail: View {
   
-  let previewType: PreviewType
-  
+  let previewGrouping: PreviewGrouping
+  @State private var searchText = ""
+
+  var previews: [SnapshotPreviewsCore.Preview] {
+    previewGrouping.previews.flatMap { $0.previews(requiringFullscreen: false) }.filterWithText(searchText, { $0.displayName ?? "" })
+  }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
-        ForEach(previewType.previews) { preview in
+        ForEach(previews) { preview in
           VStack(alignment: .center) {
             Text(preview.displayName ?? "Preview")
               .font(.headline)
@@ -36,7 +41,8 @@ struct PreviewsDetail: View {
     #if !os(watchOS)
     .background(Color(PlatformColor.galleryBackground))
     #endif
-    .navigationTitle(previewType.displayName)
+    .navigationTitle(previewGrouping.displayName)
+    .searchable(text: $searchText)
   }
   
 }

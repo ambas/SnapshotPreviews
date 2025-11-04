@@ -10,17 +10,21 @@ import SwiftUI
 import SnapshotPreviewsCore
 
 struct PreviewCellView: View {
-  let preview: PreviewType
+  let previewGrouping: PreviewGrouping
+
+  var previews: [SnapshotPreviewsCore.Preview] {
+    previewGrouping.previews.flatMap { $0.previews(requiringFullscreen: false)}
+  }
 
   var body: some View {
     VStack(alignment: .center) {
       TitleSubtitleRow(
-        title: preview.displayName,
-        subtitle: "\(preview.previews.count) Preview\(preview.previews.count != 1 ? "s" : "")"
+        title: previewGrouping.displayName,
+        subtitle: "\(previews.count) Preview\(previews.count != 1 ? "s" : "")"
       )
       .padding(EdgeInsets(top: 12, leading: 16, bottom: 6, trailing: 16))
 
-      PreviewCell(preview: preview.previews[0])
+      PreviewCell(preview: previews[0])
     }
     .padding(.bottom, 8)
   }
@@ -48,6 +52,8 @@ struct PreviewCellView: View {
 public struct PreviewGallery: View {
   /// The data source containing preview information.
   let data: PreviewData
+  
+  @State private var searchText = ""
 
   /// Initializes a new `PreviewGallery` with the given preview data.
   ///
@@ -61,11 +67,12 @@ public struct PreviewGallery: View {
   public var body: some View {
     if data.modules.count > 0 {
       List {
-        ForEach(Array(data.modules).sorted(), id: \.self) { module in
+        ForEach(Array(data.modules).sorted().filterWithText(searchText, { $0 }), id: \.self) { module in
           ModulePreviews(module: module, data: data)
         }
       }
       .navigationTitle("Modules")
+      .searchable(text: $searchText)
     } else {
       Text("No previews found")
     }

@@ -12,25 +12,22 @@ struct ModulePreviews: View {
   let module: String
   let data: PreviewData
   
+  @State private var searchText = ""
+
   var body: some View {
-    let componentProviders = data.previews(in: module).filter { provider in
-      return provider.previews.contains { preview in
-        return !preview.requiresFullScreen
-      }
-    }
-    let featureProviders = data.previews(in: module).filter { provider in
-      return provider.previews.contains { preview in
-        return preview.requiresFullScreen
-      }
-    }
+    let allPreviewGroups = data.previews(in: module)
+    let componentProviders = allPreviewGroups.filter { provider in
+      provider.previewTypes(requiringFullscreen: false).count > 0
+    }.filterWithText(searchText, { $0.displayName })
+    let fullScreenCount = allPreviewGroups.flatMap { $0.previews.flatMap { $0.previews(requiringFullscreen: true)} }.count
     return NavigationLink(module) {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
-          if !featureProviders.isEmpty {
+          if fullScreenCount > 0 && (searchText.isEmpty || "screens".contains(searchText.lowercased())) {
             NavigationLink(destination: ModuleScreens(module: module, data: data)) {
               TitleSubtitleRow(
                 title: "Screens",
-                subtitle: "\(featureProviders.count) Preview\(featureProviders.count != 1 ? "s" : "")")
+                subtitle: "\(fullScreenCount) Preview\(fullScreenCount != 1 ? "s" : "")")
               .padding(16)
               #if !os(watchOS)
               .background(Color(PlatformColor.gallerySecondaryBackground))
@@ -38,8 +35,8 @@ struct ModulePreviews: View {
             }
           }
           ForEach(componentProviders) { preview in
-            NavigationLink(destination: PreviewsDetail(previewType: preview)) {
-              PreviewCellView(preview: preview)
+            NavigationLink(destination: PreviewsDetail(previewGrouping: preview)) {
+              PreviewCellView(previewGrouping: preview)
               #if !os(watchOS)
                 .background(Color(PlatformColor.gallerySecondaryBackground))
               #endif
@@ -55,6 +52,7 @@ struct ModulePreviews: View {
       .background(Color(PlatformColor.galleryBackground))
       #endif
       .navigationTitle(module)
+      .searchable(text: $searchText)
     }
   }
 }
