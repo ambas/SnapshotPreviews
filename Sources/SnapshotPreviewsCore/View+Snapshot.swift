@@ -11,25 +11,14 @@ public enum RenderingError: Error {
   case failedRendering(CGSize)
   case maxSize(CGSize)
   case expandingViewTimeout(CGSize)
+  case orientationChangeTimeout
 }
 
 #if canImport(UIKit) && !os(visionOS) && !os(watchOS) && !os(tvOS)
 import Foundation
 import SwiftUI
 import UIKit
-import AccessibilitySnapshotCore
 import SnapshotSharedModels
-
-extension AccessibilityMarker: AccessibilityMark {
-  public var accessibilityShape: MarkerShape {
-    switch shape {
-    case .frame(let frame):
-      return .frame(frame)
-    case .path(let path):
-      return .path(path)
-    }
-  }
-}
 
 private var _colorScheme: ColorScheme? = nil
 
@@ -58,6 +47,7 @@ extension View {
     controller: ExpandingViewController,
     window: UIWindow,
     async: Bool,
+    a11yWrapper: ((UIViewController, UIWindow, PreviewLayout) -> UIView)? = nil,
     completion: @escaping (SnapshotResult) -> Void)
   {
     controller.expansionSettled = { [weak controller, weak window] renderingMode, precision, accessibilityEnabled, appStoreSnapshot, error in
@@ -67,44 +57,26 @@ extension View {
 
       if let error {
         DispatchQueue.main.async {
-          completion(SnapshotResult(image: .failure(error), precision: precision, accessibilityEnabled: accessibilityEnabled, accessibilityMarkers: nil, colorScheme: _colorScheme, appStoreSnapshot: appStoreSnapshot))
+          completion(SnapshotResult(image: .failure(error), precision: precision, accessibilityEnabled: accessibilityEnabled, colorScheme: _colorScheme, appStoreSnapshot: appStoreSnapshot))
         }
         return
       }
 
       if async {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-          let imageResult = Self.takeSnapshot(layout: layout, renderingMode: renderingMode, rootVC: containerVC, targetView: controller.view)
-          completion(SnapshotResult(image: imageResult.mapError { $0 }, precision: precision, accessibilityEnabled: accessibilityEnabled, accessibilityMarkers: nil, colorScheme: _colorScheme, appStoreSnapshot: appStoreSnapshot))
+          let imageResult = Self.takeSnapshot(layout: layout, renderingMode: renderingMode, window: window, rootVC: containerVC, targetView: controller.view)
+          completion(SnapshotResult(image: imageResult.mapError { $0 }, precision: precision, accessibilityEnabled: accessibilityEnabled, colorScheme: _colorScheme, appStoreSnapshot: appStoreSnapshot))
         }
       } else {
         DispatchQueue.main.async {
-          if let accessibilityEnabled, accessibilityEnabled {
-            let containedView: UIView
-            switch layout {
-            case .device:
-              containedView = containerVC.view
-            default:
-              containedView = controller.view
-            }
-            let mode = controller.view.bounds.size.requiresCoreAnimationSnapshot ? AccessibilitySnapshotView.ViewRenderingMode.renderLayerInContext : renderingMode?.a11yRenderingMode
-            let a11yView = AccessibilitySnapshotView(
-              containedView: containedView,
-              viewRenderingMode: mode ?? .drawHierarchyInRect,
-              activationPointDisplayMode: .never,
-              showUserInputLabels: true)
-
-            a11yView.center = window.center
-            window.addSubview(a11yView)
-
-            let elements = try? a11yView.parseAccessibility(useMonochromeSnapshot: false)
-            a11yView.sizeToFit()
-            let result = Self.takeSnapshot(layout: .sizeThatFits, renderingMode: renderingMode, rootVC: containerVC, targetView: a11yView)
+          if let a11yWrapper, let accessibilityEnabled, accessibilityEnabled {
+            let a11yView = a11yWrapper(controller, window, layout)
+            let result = Self.takeSnapshot(layout: .sizeThatFits, renderingMode: renderingMode, window: window, rootVC: containerVC, targetView: a11yView)
             a11yView.removeFromSuperview()
-            completion(SnapshotResult(image: result.mapError { $0 }, precision: precision, accessibilityEnabled: accessibilityEnabled, accessibilityMarkers: elements, colorScheme: _colorScheme, appStoreSnapshot: appStoreSnapshot))
+            completion(SnapshotResult(image: result.mapError { $0 }, precision: precision, accessibilityEnabled: accessibilityEnabled, colorScheme: _colorScheme, appStoreSnapshot: appStoreSnapshot))
           } else {
-            let imageResult = Self.takeSnapshot(layout: layout, renderingMode: renderingMode, rootVC: containerVC, targetView: controller.view)
-            completion(SnapshotResult(image: imageResult.mapError { $0 }, precision: precision, accessibilityEnabled: accessibilityEnabled, accessibilityMarkers: nil, colorScheme: _colorScheme, appStoreSnapshot: appStoreSnapshot))
+            let imageResult = Self.takeSnapshot(layout: layout, renderingMode: renderingMode, window: window, rootVC: containerVC, targetView: controller.view)
+            completion(SnapshotResult(image: imageResult.mapError { $0 }, precision: precision, accessibilityEnabled: accessibilityEnabled, colorScheme: _colorScheme, appStoreSnapshot: appStoreSnapshot))
           }
         }
       }
@@ -142,10 +114,19 @@ extension View {
   private static func takeSnapshot(
     layout: PreviewLayout,
     renderingMode: EmergeRenderingMode?,
+    window: UIWindow,
     rootVC: UIViewController,
     targetView: UIView,
     maxSize: Double = 1_000_000) -> Result<UIImage, RenderingError>
   {
+    if renderingMode == EmergeRenderingMode.window {
+      let renderer = UIGraphicsImageRenderer(size: window.bounds.size)
+      let screenshot = renderer.image { _ in
+          window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      }
+      return .success(screenshot)
+    }
+
     let view = targetView
     let drawCode: (CGContext) -> Void
 
@@ -202,24 +183,13 @@ extension UIView {
       return true
     case .uiView:
       return drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true)
-    case .none:
+    case .window, .none:
       if !size.requiresCoreAnimationSnapshot {
         return drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true)
       } else {
         layer.layerForSnapshot.render(in: context)
         return true
       }
-    }
-  }
-}
-
-extension EmergeRenderingMode {
-  var a11yRenderingMode: AccessibilitySnapshotView.ViewRenderingMode {
-    switch self {
-    case .coreAnimation:
-      return .renderLayerInContext
-    case .uiView:
-      return .drawHierarchyInRect
     }
   }
 }
