@@ -8,6 +8,7 @@
 import Foundation
 @_implementationOnly import SnapshotPreviewsCore
 import XCTest
+import SwiftUI
 
 /// A test class for generating snapshots of Xcode previews.
 ///
@@ -30,7 +31,11 @@ open class SnapshotTest: PreviewBaseTest, PreviewFilters {
   open class func excludedSnapshotPreviews() -> [String]? {
     nil
   }
-  
+
+  class func viewForRecord(_ view: AnyView, name: String?) {
+
+  }
+
   #if canImport(UIKit) && !os(watchOS) && !os(visionOS) && !os(tvOS)
   open class func setupA11y() -> ((UIViewController, UIWindow, PreviewLayout) -> UIView)? {
     print("base class")
