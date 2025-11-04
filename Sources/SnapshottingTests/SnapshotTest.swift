@@ -32,7 +32,7 @@ open class SnapshotTest: PreviewBaseTest, PreviewFilters {
     nil
   }
 
-  class func viewForRecord(_ view: AnyView, name: String?) {
+  open class func viewForRecord(_ view: AnyView, name: String?) {
 
   }
 
